@@ -865,5 +865,13 @@ function bindControls() {
 bindControls();
 bindCanvasDragging();
 syncControls();
+
+const img = new Image();
+img.onload = () => {
+  profileImage = img;
+  afterStateChange();
+};
+img.src = 'assets/images.jpg';
+
 setSelectionHint("none");
 draw();
