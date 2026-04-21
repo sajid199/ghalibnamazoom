@@ -480,17 +480,47 @@ function drawGlow(context, centerX, centerY, radius, opacity) {
 
 function drawQuote(context, animationProgress = 0) {
   const layout = layoutQuote(context);
-  const easedProgress = 1 - (1 - animationProgress) ** 2;
-
-  layout.tokens.forEach((token) => {
+  
+  // Get all word tokens (excluding spaces and newlines)
+  const words = layout.tokens.filter((token) => token.type === "word");
+  const totalWords = words.length;
+  
+  // Stagger timing: each word gets a window of animation
+  const wordDuration = 1 / Math.max(1, totalWords);
+  
+  layout.tokens.forEach((token, tokenIndex) => {
     if (token.type === "space") {
       return;
     }
 
     const baseSize = token.highlight ? Number(state.highlightBaseSize) : Number(state.quoteFontSize);
-    const animatedSize = token.highlight
-      ? baseSize + (Number(state.highlightTargetSize) - baseSize) * easedProgress
-      : baseSize;
+    
+    // Calculate animation for this specific word
+    let animatedSize = baseSize;
+    let wordProgress = 0;
+    
+    if (token.type === "word") {
+      // Find this word's index among all words
+      const wordIndex = words.findIndex((w) => w === token);
+      
+      // Calculate the time window for this word
+      const wordStartTime = wordIndex * wordDuration;
+      const wordEndTime = (wordIndex + 1) * wordDuration;
+      
+      // Clamp animation progress to this word's window
+      if (animationProgress >= wordStartTime && animationProgress < wordEndTime) {
+        // Calculate progress within this word's window (0 to 1)
+        wordProgress = (animationProgress - wordStartTime) / wordDuration;
+        // Apply easing
+        const easedProgress = 1 - (1 - wordProgress) ** 2;
+        // Interpolate size from base to target
+        const targetSize = token.highlight ? Number(state.highlightTargetSize) : baseSize * 1.3;
+        animatedSize = baseSize + (targetSize - baseSize) * easedProgress;
+      } else if (animationProgress >= wordEndTime) {
+        // After this word's animation, return to base size
+        animatedSize = baseSize;
+      }
+    }
 
     context.textAlign = "left";
     context.textBaseline = "top";
@@ -500,24 +530,30 @@ function drawQuote(context, animationProgress = 0) {
     let drawX = token.x;
     let drawY = token.y;
 
-    if (token.highlight) {
+    // Center the zoomed word
+    if (animatedSize !== baseSize && token.type === "word") {
       const centerX = token.x + token.width / 2;
       const centerY = token.y + token.size / 2;
       drawX = centerX - drawWidth / 2;
       drawY = centerY - animatedSize / 2;
 
+      // Draw glow for zoomed words
       if (Number(state.highlightGlow) > 0) {
+        const glowProgress = Math.max(0, wordProgress);
         drawGlow(
           context,
           centerX,
           centerY,
           Math.max(animatedSize, drawWidth) * 0.68,
-          Number(state.highlightGlow) * (0.35 + easedProgress * 0.65)
+          Number(state.highlightGlow) * (0.35 + glowProgress * 0.65)
         );
       }
 
       context.shadowColor = "rgba(255, 75, 26, 0.38)";
-      context.shadowBlur = 10 + 26 * easedProgress;
+      context.shadowBlur = 10 + 26 * wordProgress;
+    }
+
+    if (token.highlight) {
       context.fillStyle = state.highlightColor;
     } else {
       context.shadowBlur = 0;
